@@ -1,0 +1,86 @@
+# Langfuse local deployment for Nanobot-Eino tracing.
+# Usage: docker compose -f docker-compose.langfuse.yml up -d
+# UI: http://localhost:3000
+
+services:
+  langfuse:
+    image: langfuse/langfuse:3
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://langfuse:langfuse@postgres:5432/langfuse"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_MIGRATION_URL: "clickhouse://clickhouse:9000"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      SALT: "nanobot-eino-local-salt"
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      NEXTAUTH_SECRET: "nanobot-eino-local-secret"
+      NEXTAUTH_URL: "http://localhost:3000"
+      LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: "http://minio:9000"
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: "minioadmin"
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: "minioadmin"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: "langfuse"
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: "us-east-1"
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfuse-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    volumes:
+      - langfuse-clickhouse:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - langfuse-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - langfuse-minio:/data
+    ports:
+      - "9090:9001"
+
+volumes:
+  langfuse-postgres:
+  langfuse-clickhouse:
+  langfuse-redis:
+  langfuse-minio:
