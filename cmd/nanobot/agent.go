@@ -21,6 +21,7 @@ import (
 	"github.com/wall/nanobot-eino/pkg/memory"
 	"github.com/wall/nanobot-eino/pkg/session"
 	"github.com/wall/nanobot-eino/pkg/tools"
+	"github.com/wall/nanobot-eino/pkg/trace"
 	"github.com/wall/nanobot-eino/pkg/workspace"
 )
 
@@ -54,6 +55,12 @@ func runAgent(message string, raw bool) error {
 	}()
 
 	cfg := mustLoadConfig()
+
+	traceShutdown, err := trace.Init(cfg.Trace)
+	if err != nil {
+		return fmt.Errorf("init tracing: %w", err)
+	}
+	defer traceShutdown()
 
 	promptDir := cfg.ResolvePromptDir()
 	skillsDir := cfg.ResolveSkillsDir()
