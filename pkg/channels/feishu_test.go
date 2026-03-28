@@ -328,6 +328,108 @@ func TestExtractPostText_Wrapped(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Markdown → Feishu conversion tests
+// ---------------------------------------------------------------------------
+
+func TestConvertMarkdownToFeishu_Headings(t *testing.T) {
+	input := "### 🔹 已披露完整年度核心指标\nsome text\n## Second heading"
+	got := convertMarkdownToFeishu(input)
+	if strings.Contains(got, "###") {
+		t.Fatalf("headings should be converted, got:\n%s", got)
+	}
+	if !strings.Contains(got, "**🔹 已披露完整年度核心指标**") {
+		t.Fatalf("expected bold heading, got:\n%s", got)
+	}
+	if !strings.Contains(got, "**Second heading**") {
+		t.Fatalf("expected bold second heading, got:\n%s", got)
+	}
+}
+
+func TestConvertMarkdownToFeishu_Table(t *testing.T) {
+	input := `| 年度 | 总营收 | 净利润 |
+| --- | --- | --- |
+| 2021年 | 80.4亿元 | 12.4亿元 |
+| 2024年 | 89.78亿元 | 6.95亿元 |`
+
+	got := convertMarkdownToFeishu(input)
+	if strings.Contains(got, "| --- |") {
+		t.Fatalf("separator row should be removed, got:\n%s", got)
+	}
+	// Header row should become bold
+	if !strings.Contains(got, "**年度 | 总营收 | 净利润**") {
+		t.Fatalf("expected bold header row, got:\n%s", got)
+	}
+	// Data rows should have bold keys
+	if !strings.Contains(got, "**年度:** 2021年") {
+		t.Fatalf("expected bold key in data row, got:\n%s", got)
+	}
+}
+
+func TestConvertMarkdownToFeishu_Blockquote(t *testing.T) {
+	input := "> This is a quote"
+	got := convertMarkdownToFeishu(input)
+	if strings.Contains(got, "> ") {
+		t.Fatalf("blockquote should be converted, got:\n%s", got)
+	}
+	if !strings.Contains(got, "*This is a quote*") {
+		t.Fatalf("expected italic quote, got:\n%s", got)
+	}
+}
+
+func TestConvertMarkdownToFeishu_MixedContent(t *testing.T) {
+	// Simulate the real user content
+	input := `### 🔹 已披露完整年度核心指标
+| 年度 | 总营收 |
+| --- | --- |
+| 2024年 | 89.78亿元 |
+### 🔹 业务结构说明
+稳健医疗分为两大业务板块`
+
+	got := convertMarkdownToFeishu(input)
+	// No ### or | --- | should remain
+	if strings.Contains(got, "### ") {
+		t.Fatalf("headings not converted:\n%s", got)
+	}
+	if strings.Contains(got, "| --- |") {
+		t.Fatalf("table separator not removed:\n%s", got)
+	}
+	if !strings.Contains(got, "稳健医疗分为两大业务板块") {
+		t.Fatalf("plain text should be preserved:\n%s", got)
+	}
+}
+
+func TestConvertMarkdownToFeishu_NoChangeForSupportedSyntax(t *testing.T) {
+	input := "**bold** and *italic* and [link](url)\n- item1\n- item2"
+	got := convertMarkdownToFeishu(input)
+	if got != input {
+		t.Fatalf("supported syntax should pass through unchanged, got:\n%s", got)
+	}
+}
+
+func TestBuildFeishuCardContents_ConvertsUnsupportedMarkdown(t *testing.T) {
+	input := "### Heading\n| A | B |\n| --- | --- |\n| 1 | 2 |"
+	cards, ok := buildFeishuCardContents(input, nil)
+	if !ok || len(cards) == 0 {
+		t.Fatal("expected card contents")
+	}
+	var card struct {
+		Elements []struct {
+			Content string `json:"content"`
+		} `json:"elements"`
+	}
+	if err := json.Unmarshal([]byte(cards[0]), &card); err != nil {
+		t.Fatalf("invalid card json: %v", err)
+	}
+	content := card.Elements[0].Content
+	if strings.Contains(content, "###") {
+		t.Fatalf("heading should be converted in card content: %s", content)
+	}
+	if strings.Contains(content, "| --- |") {
+		t.Fatalf("table separator should be removed in card content: %s", content)
+	}
+}
+
 func TestExtractInteractiveContent_FullCard(t *testing.T) {
 	// Simulate a realistic interactive card JSON
 	raw := `{

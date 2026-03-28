@@ -300,6 +300,8 @@ func buildFeishuCardContents(content string, metadata map[string]any) ([]string,
 		}
 	}
 
+	rendered = convertMarkdownToFeishu(rendered)
+
 	chunks := splitFeishuMarkdownContent(rendered, feishuCardMarkdownMaxRunes)
 	out := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {
@@ -397,6 +399,133 @@ func splitFeishuMarkdownContent(content string, maxRunes int) []string {
 		chunks = append(chunks, string(runes[start:end]))
 	}
 	return chunks
+}
+
+// convertMarkdownToFeishu transforms standard Markdown into the subset that
+// Feishu card markdown supports.  Unsupported elements:
+//   - Headings (# / ## / ###)  → bold text
+//   - Tables (| col | col |)   → structured text with bold headers
+//   - Blockquotes (> text)     → italic text
+func convertMarkdownToFeishu(content string) string {
+	lines := strings.Split(content, "\n")
+	var out []string
+
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
+
+		// --- headings → bold ---
+		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "#") {
+			level := 0
+			for _, ch := range trimmed {
+				if ch == '#' {
+					level++
+				} else {
+					break
+				}
+			}
+			if level > 0 && level <= 6 {
+				heading := strings.TrimSpace(trimmed[level:])
+				out = append(out, "**"+heading+"**")
+				i++
+				continue
+			}
+		}
+
+		// --- table block → structured text ---
+		if isMarkdownTableRow(line) {
+			tableStart := i
+			for i < len(lines) && isMarkdownTableRow(lines[i]) {
+				i++
+			}
+			converted := convertMarkdownTable(lines[tableStart:i])
+			out = append(out, converted...)
+			continue
+		}
+
+		// --- blockquotes → italic ---
+		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "> ") {
+			quote := strings.TrimSpace(trimmed[2:])
+			out = append(out, "*"+quote+"*")
+			i++
+			continue
+		}
+
+		out = append(out, line)
+		i++
+	}
+	return strings.Join(out, "\n")
+}
+
+func isMarkdownTableRow(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmed, "|") && strings.HasSuffix(trimmed, "|")
+}
+
+// convertMarkdownTable turns a Markdown table into a Feishu-friendly text block.
+// Each data row becomes: **header1:** value1 | **header2:** value2 | …
+func convertMarkdownTable(lines []string) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+
+	parseRow := func(line string) []string {
+		trimmed := strings.TrimSpace(line)
+		trimmed = strings.TrimPrefix(trimmed, "|")
+		trimmed = strings.TrimSuffix(trimmed, "|")
+		cells := strings.Split(trimmed, "|")
+		for i := range cells {
+			cells[i] = strings.TrimSpace(cells[i])
+		}
+		return cells
+	}
+
+	isSeparator := func(line string) bool {
+		cells := parseRow(line)
+		for _, c := range cells {
+			cleaned := strings.ReplaceAll(strings.ReplaceAll(c, "-", ""), ":", "")
+			if strings.TrimSpace(cleaned) != "" {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Find header row and data rows, skipping separator.
+	var headers []string
+	var dataRows [][]string
+	for idx, line := range lines {
+		if isSeparator(line) {
+			continue
+		}
+		cells := parseRow(line)
+		if idx == 0 {
+			headers = cells
+		} else {
+			dataRows = append(dataRows, cells)
+		}
+	}
+
+	if len(headers) == 0 {
+		return nil
+	}
+
+	var result []string
+	// Emit headers as a bold line.
+	result = append(result, "**"+strings.Join(headers, " | ")+"**")
+
+	for _, row := range dataRows {
+		var parts []string
+		for j, cell := range row {
+			if j < len(headers) {
+				parts = append(parts, "**"+headers[j]+":** "+cell)
+			} else {
+				parts = append(parts, cell)
+			}
+		}
+		result = append(result, strings.Join(parts, " | "))
+	}
+	return result
 }
 
 func pickFeishuReplyTarget(replyTo string, metadata map[string]any) string {

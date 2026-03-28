@@ -12,3 +12,6 @@ trace.md
 question.md
 task_plan.md
 note.md
+.idea/
+.vscode/
+.gstack/
