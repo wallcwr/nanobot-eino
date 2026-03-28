@@ -88,6 +88,7 @@ go run ./cmd/nanobot agent -m "hello"
 # 启动网关（飞书 + agent + heartbeat + cron）
 go run ./cmd/nanobot gateway
 ```
+![feishu](/case/channel.gif)
 
 ## CLI 命令
 
@@ -313,8 +314,14 @@ nanobot-eino/
 ├── configs/
 │   ├── prompts/             # 默认 Prompt（SOUL / USER / TOOLS / AGENTS / HEARTBEAT）
 │   └── skills/              # 内建技能（memory / weather / summarize / skill-creator / github / cron / tmux / clawhub）
+├── scripts/
+│   ├── start-langfuse.sh    # Langfuse 一键启动（Linux/macOS）
+│   ├── start-langfuse.ps1   # Langfuse 一键启动（Windows）
+│   ├── stop-langfuse.sh     # Langfuse 停止（Linux/macOS）
+│   └── stop-langfuse.ps1    # Langfuse 停止（Windows）
 ├── data/                    # 运行时数据（sessions / memory / jobs）
 ├── go.mod
+├── Makefile                 # make langfuse-up / langfuse-down / langfuse-logs
 ├── Dockerfile
 └── note.md                  # 设计笔记
 ```
@@ -365,13 +372,50 @@ docker run --rm -it \
 ---
 
 ## 链路监控（Tracing）
+![langfuse链路追踪](/case/langfuse.png)
 
 基于 Eino 框架的全局 Callback 机制，集成 [Langfuse](https://langfuse.com) 实现完整链路追踪，覆盖 LLM 调用、工具执行、记忆整理全流程。
 
 ### 启动 Langfuse
 
+项目提供一键启动脚本，自动检测并安装 Docker，适用于 Linux / macOS / Windows：
+
+**Linux / macOS：**
+
 ```bash
-docker compose -f docker-compose.langfuse.yml up -d
+# 通过 make
+make langfuse-up
+
+# 或直接运行脚本
+./scripts/start-langfuse.sh
+```
+
+**Windows (PowerShell)：**
+
+```powershell
+.\scripts\start-langfuse.ps1
+```
+
+脚本会自动完成以下步骤：
+1. 检测 Docker 是否安装，未安装则提示自动安装（Linux 用 `get.docker.com`，macOS 用 `brew`，Windows 用 `winget`/`choco`）
+2. 检测 Docker daemon 是否运行，未运行则自动启动
+3. 启动所有 Langfuse 依赖服务（PostgreSQL、ClickHouse、Redis、MinIO）
+4. 等待 Langfuse 就绪并输出访问地址
+
+停止服务：
+
+```bash
+# Linux / macOS
+make langfuse-down   # 或 ./scripts/stop-langfuse.sh
+
+# Windows
+.\scripts\stop-langfuse.ps1
+```
+
+查看日志：
+
+```bash
+make langfuse-logs
 ```
 
 等待服务启动后访问 `http://localhost:3000`，注册账号并在 Settings → API Keys 创建密钥。
