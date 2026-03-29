@@ -4,6 +4,13 @@
 
 ---
 
+## 互动教程
+
+我为本仓库提供了一个零门槛的互动教程，帮助你快速理解底层架构与代码数据流：
+
+- 🇨🇳 [中文版](https://iamclancyliang.github.io/nanobot-eino/nanobot-eino-course_zh.html)
+- 🇬🇧 [英文版](https://iamclancyliang.github.io/nanobot-eino/nanobot-eino-course.html)
+
 ## 功能概览
 
 - **ReAct Agent Loop** — 基于 Eino React Agent 实现多步推理 + 工具调用循环
